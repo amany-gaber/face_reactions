@@ -1,0 +1,2 @@
+[phases.setup]
+nixPkgs = ["libGL", "libGLU", "xorg.libX11", "xorg.libXi", "xorg.libXext", "xorg.libXrender", "libpng", "libjpeg", "ffmpeg", "python39", "python39Packages.opencv4"]
