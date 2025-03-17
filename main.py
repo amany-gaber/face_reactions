@@ -1,34 +1,44 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 import uvicorn
-import cv2
 import numpy as np
 import pandas as pd
 import pickle
 import os
+import json
 from tempfile import NamedTemporaryFile
 
-app = FastAPI()
+app = FastAPI(title="Body Language Analysis API")
 
-# Load the trained model
+# Try to load the model, but have a fallback
 try:
     with open('body_language.pkl', 'rb') as f:
         model = pickle.load(f)
+    model_loaded = True
 except Exception as e:
     print(f"Error loading model: {e}")
-    # Create a placeholder model
     model = None
+    model_loaded = False
 
 @app.get("/")
 async def root():
-    return {"message": "Body Language Analysis API", "status": "running"}
+    return {
+        "message": "Body Language Analysis API",
+        "status": "running",
+        "model_loaded": model_loaded,
+        "endpoints": {
+            "GET /": "This info page",
+            "GET /health": "Health check endpoint",
+            "POST /upload/": "Upload a video for analysis"
+        }
+    }
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model_loaded": model is not None}
+    return {"status": "ok", "model_loaded": model_loaded}
 
 @app.post("/upload/")
 async def upload_video(file: UploadFile = File(...)):
-    if model is None:
+    if not model_loaded:
         raise HTTPException(status_code=500, detail="Model not loaded properly")
     
     # Check if the file is a video
@@ -37,29 +47,31 @@ async def upload_video(file: UploadFile = File(...)):
     
     # Save file temporarily
     temp = NamedTemporaryFile(delete=False, suffix=".mp4")
-    temp.write(await file.read())
-    temp.close()
-    
-    # Process video
-    cap = cv2.VideoCapture(temp.name)
-    
-    # Just return basic video info for now
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = frame_count / fps
-    
-    cap.release()
-    os.remove(temp.name)
-    
-    return {
-        "video_info": {
-            "fps": fps,
-            "frame_count": frame_count,
-            "duration_seconds": duration
-        },
-        "model_status": "loaded" if model is not None else "not loaded"
-    }
+    try:
+        contents = await file.read()
+        temp.write(contents)
+        temp.close()
+        
+        # For the initial version, just return that we received the file
+        # This can be expanded later with actual video processing
+        file_size = os.path.getsize(temp.name)
+        
+        return {
+            "message": "Video received successfully",
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "file_size_bytes": file_size,
+            "model_status": "loaded" if model_loaded else "not loaded",
+            "note": "Video processing with OpenCV and MediaPipe will be implemented in the next version"
+        }
+    except Exception as e:
+        return {"error": f"Failed to process video: {str(e)}"}
+    finally:
+        # Clean up the temp file
+        if os.path.exists(temp.name):
+            os.remove(temp.name)
 
+# Configure the app to use the PORT environment variable set by Railway
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
