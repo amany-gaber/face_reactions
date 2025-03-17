@@ -9,7 +9,10 @@ import os
 from tempfile import NamedTemporaryFile
 
 app = FastAPI()
-
+app.add_middleware(
+    middleware_class=RequestBodyLimitMiddleware,
+    max_body_size=50_000_000  # 50MB
+)
 # Load the trained model
 with open('body_language.pkl', 'rb') as f:
     model = pickle.load(f)
