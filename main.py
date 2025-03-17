@@ -1,7 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 import uvicorn
 import numpy as np
-import pandas as pd
 import pickle
 import os
 import cv2  # OpenCV for video processing
@@ -18,7 +17,8 @@ try:
         model = pickle.load(f)
     print("Model loaded successfully")
 except Exception as e:
-    print(f"Error loading model: {e}")
+    print(f"Error loading model: {e}")  # This will print out the actual error in the server logs
+    model = None  # Make sure to set model to None if loading fails
     print("Continuing without model for testing purposes")
 
 # A function to extract frames from the video file using OpenCV
@@ -82,7 +82,10 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model_loaded": model is not None, "test_mode": model is None}
+    # Add more specific messages to indicate model status
+    if model is None:
+        return {"status": "ok", "model_loaded": False, "error": "Model loading failed"}
+    return {"status": "ok", "model_loaded": True}
 
 @app.post("/upload/")
 async def upload_video(file: UploadFile = File(...)):
