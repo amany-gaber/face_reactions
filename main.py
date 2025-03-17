@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pickle
 import os
+import cv2  # OpenCV for video processing
 from tempfile import NamedTemporaryFile
 
 app = FastAPI(title="Body Language Analysis API")
@@ -20,6 +21,47 @@ try:
 except Exception as e:
     print(f"Error loading model: {e}")
     print("Continuing without model for testing purposes")
+
+# A function to extract frames from the video file using OpenCV
+def extract_frames(video_path):
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frames.append(frame)
+    cap.release()
+    return frames
+
+# A function to process the video frames and make predictions using the model
+def process_video_and_predict(video_file_path):
+    # Extract frames from the video
+    frames = extract_frames(video_file_path)
+    
+    # Assuming the model expects a certain input format. Example:
+    # Resize frames, convert to grayscale, and reshape them to match the model's input requirements.
+    processed_frames = []
+    for frame in frames:
+        resized_frame = cv2.resize(frame, (224, 224))  # Resize to the input size the model expects (example)
+        gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
+        processed_frames.append(gray_frame)
+    
+    # Convert frames to a NumPy array (or any format expected by your model)
+    input_data = np.array(processed_frames)
+    
+    # Use the model to predict the class of each frame (modify this part based on your model's structure)
+    predictions = []
+    for frame in input_data:
+        prediction = model.predict(np.expand_dims(frame, axis=0))  # Example prediction
+        predicted_class = np.argmax(prediction)  # Assuming the model outputs class probabilities
+        predicted_prob = np.max(prediction)  # Get the highest probability
+        predictions.append({
+            "class": predicted_class,
+            "probability": predicted_prob
+        })
+    
+    return predictions
 
 @app.get("/")
 async def root():
@@ -54,14 +96,16 @@ async def upload_video(file: UploadFile = File(...)):
         
         file_size = os.path.getsize(temp.name)
         
-        # Add test results if model is not available
-        test_results = []
+        # If model is available, process the video and predict the output
         if model is None:
             test_results = [
                 {"class": "happy", "probability": 0.85},
                 {"class": "neutral", "probability": 0.12},
                 {"class": "sad", "probability": 0.03}
             ]
+        else:
+            # If the model is available, process the video and predict the output
+            test_results = process_video_and_predict(temp.name)
         
         return {
             "message": "Video received successfully",
@@ -69,7 +113,7 @@ async def upload_video(file: UploadFile = File(...)):
             "content_type": file.content_type,
             "file_size_bytes": file_size,
             "mode": "test" if model is None else "production",
-            "results": test_results if model is None else "Would process with real model"
+            "results": test_results
         }
     except Exception as e:
         return {"error": f"Failed to process video: {str(e)}"}
