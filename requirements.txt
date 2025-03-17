@@ -6,4 +6,6 @@ pandas==2.0.2
 scikit-learn==1.2.2
 # Use pre-compiled wheels that don't need build tools
 opencv-python-headless==4.7.0.72
+opencv-python
+python-multipart
 # Either exclude mediapipe or use a specific version with wheels
