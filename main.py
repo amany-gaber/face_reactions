@@ -9,16 +9,17 @@ import os
 from tempfile import NamedTemporaryFile
 
 app = FastAPI()
-app.add_middleware(
-    middleware_class=RequestBodyLimitMiddleware,
-    max_body_size=50_000_000  # 50MB
-)
+
 # Load the trained model
 with open('body_language.pkl', 'rb') as f:
     model = pickle.load(f)
 
 mp_drawing = mp.solutions.drawing_utils
 mp_holistic = mp.solutions.holistic
+
+@app.get("/")
+async def root():
+    return {"message": "Body Language Analysis API"}
 
 @app.post("/upload/")
 async def upload_video(file: UploadFile = File(...)):
@@ -36,7 +37,6 @@ async def upload_video(file: UploadFile = File(...)):
             ret, frame = cap.read()
             if not ret:
                 break
-
             # Convert to RGB
             image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image.flags.writeable = False  
@@ -59,7 +59,7 @@ async def upload_video(file: UploadFile = File(...)):
                 
                 results_list.append({
                     "class": body_language_class,
-                    "probability": round(body_language_prob[np.argmax(body_language_prob)], 2)
+                    "probability": float(round(body_language_prob[np.argmax(body_language_prob)], 2))
                 })
             except:
                 pass
@@ -69,4 +69,5 @@ async def upload_video(file: UploadFile = File(...)):
     return {"results": results_list}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
