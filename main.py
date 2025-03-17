@@ -9,8 +9,7 @@ from tempfile import NamedTemporaryFile
 
 app = FastAPI(title="Body Language Analysis API")
 
-# Set model_loaded to True even if loading fails
-model_loaded = True
+# Initialize the model as None
 model = None
 
 # Try to load the model, but don't fail if it doesn't work
@@ -34,31 +33,35 @@ def extract_frames(video_path):
     cap.release()
     return frames
 
+# A function to preprocess frames (e.g., resizing, normalization)
+def preprocess_frame(frame):
+    # Resize the frame to the model's expected input size (example: 224x224)
+    resized_frame = cv2.resize(frame, (224, 224))  # Adjust based on your model's input size
+    # Normalize if necessary (e.g., dividing by 255 for image data)
+    normalized_frame = resized_frame / 255.0  # Normalize pixel values to [0, 1]
+    # Convert to the format your model expects (e.g., adding a batch dimension)
+    return np.expand_dims(normalized_frame, axis=0)
+
 # A function to process the video frames and make predictions using the model
 def process_video_and_predict(video_file_path):
     # Extract frames from the video
     frames = extract_frames(video_file_path)
     
-    # Assuming the model expects a certain input format. Example:
-    # Resize frames, convert to grayscale, and reshape them to match the model's input requirements.
-    processed_frames = []
-    for frame in frames:
-        resized_frame = cv2.resize(frame, (224, 224))  # Resize to the input size the model expects (example)
-        gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
-        processed_frames.append(gray_frame)
-    
-    # Convert frames to a NumPy array (or any format expected by your model)
-    input_data = np.array(processed_frames)
-    
-    # Use the model to predict the class of each frame (modify this part based on your model's structure)
+    # List to store predictions
     predictions = []
-    for frame in input_data:
-        prediction = model.predict(np.expand_dims(frame, axis=0))  # Example prediction
-        predicted_class = np.argmax(prediction)  # Assuming the model outputs class probabilities
+    
+    for frame in frames:
+        processed_frame = preprocess_frame(frame)
+        # Make a prediction using the loaded model (assuming it's a classifier)
+        prediction = model.predict(processed_frame)  # Adjust based on your model's method
+        
+        # Example: If the model outputs a probability distribution, take the max probability
+        predicted_class = np.argmax(prediction, axis=1)  # Get the predicted class
         predicted_prob = np.max(prediction)  # Get the highest probability
+        
         predictions.append({
-            "class": predicted_class,
-            "probability": predicted_prob
+            "class": str(predicted_class[0]),  # Convert the class to a string
+            "probability": float(predicted_prob)  # Convert probability to float
         })
     
     return predictions
@@ -73,7 +76,7 @@ async def root():
         "endpoints": {
             "GET /": "This info page",
             "GET /health": "Health check endpoint",
-            "POST /upload/": "Upload a video for analysis (test mode)"
+            "POST /upload/": "Upload a video for analysis"
         }
     }
 
@@ -96,24 +99,20 @@ async def upload_video(file: UploadFile = File(...)):
         
         file_size = os.path.getsize(temp.name)
         
-        # If model is available, process the video and predict the output
+        # If the model is available, process the video and predict the output
         if model is None:
-            test_results = [
-                {"class": "happy", "probability": 0.85},
-                {"class": "neutral", "probability": 0.12},
-                {"class": "sad", "probability": 0.03}
-            ]
-        else:
-            # If the model is available, process the video and predict the output
-            test_results = process_video_and_predict(temp.name)
+            return {"error": "Model not loaded"}
+        
+        # Process the video and get predictions using the model
+        predictions = process_video_and_predict(temp.name)
         
         return {
             "message": "Video received successfully",
             "filename": file.filename,
             "content_type": file.content_type,
             "file_size_bytes": file_size,
-            "mode": "test" if model is None else "production",
-            "results": test_results
+            "mode": "production",
+            "results": predictions
         }
     except Exception as e:
         return {"error": f"Failed to process video: {str(e)}"}
